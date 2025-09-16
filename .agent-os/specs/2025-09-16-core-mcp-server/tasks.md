@@ -3,41 +3,41 @@
 These are the tasks to be completed for the spec detailed in @.agent-os/specs/2025-09-16-core-mcp-server/spec.md
 
 > Created: 2025-09-16
-> Status: Ready for Implementation
+> Status: Task 1 Complete, Ready for Task 2
 
 ## Tasks
 
 ### 1. Project Setup & Core Infrastructure
 
-**1.1** Write unit tests for package structure and dependency validation
-- Test package.json structure with required dependencies (node-pty, @modelcontextprotocol/sdk, ansi-parser)
-- Test TypeScript configuration for Node.js targeting
-- Test basic module imports and exports work correctly
-- Verify test framework (Jest) is properly configured
+**1.1** ✅ **COMPLETED** Write unit tests for package structure and dependency validation
+- ✅ Test package.json structure with required dependencies (node-pty, @modelcontextprotocol/sdk, ansi-parser)
+- ✅ Test TypeScript configuration for Node.js targeting
+- ✅ Test basic module imports and exports work correctly
+- ✅ Verify test framework (Jest) is properly configured
 
-**1.2** Initialize Node.js project with TypeScript configuration
-- Create package.json with MCP server dependencies
-- Configure TypeScript for Node.js ES2022 targeting
-- Set up Jest testing framework with TypeScript support
-- Create basic project directory structure (src/, tests/, dist/)
+**1.2** ✅ **COMPLETED** Initialize Node.js project with TypeScript configuration
+- ✅ Create package.json with MCP server dependencies
+- ✅ Configure TypeScript for Node.js ES2022 targeting
+- ✅ Set up Jest testing framework with TypeScript support
+- ✅ Create basic project directory structure (src/, tests/, dist/)
 
-**1.3** Write tests for core server initialization and MCP connection
-- Test server starts and binds to stdio transport
-- Test MCP protocol handshake completes successfully
-- Test server responds to ping/health check requests
-- Test graceful shutdown on SIGINT/SIGTERM signals
+**1.3** ✅ **COMPLETED** Write tests for core server initialization and MCP connection
+- ✅ Test server starts and binds to stdio transport
+- ✅ Test MCP protocol handshake completes successfully
+- ✅ Test server responds to ping/health check requests
+- ✅ Test graceful shutdown on SIGINT/SIGTERM signals
 
-**1.4** Implement basic MCP server foundation
-- Create main server entry point with stdio transport
-- Implement MCP protocol initialization and tool registration
-- Add signal handlers for graceful shutdown
-- Set up logging infrastructure for debugging
+**1.4** ✅ **COMPLETED** Implement basic MCP server foundation
+- ✅ Create main server entry point with stdio transport
+- ✅ Implement MCP protocol initialization and tool registration
+- ✅ Add signal handlers for graceful shutdown
+- ✅ Set up logging infrastructure for debugging
 
-**1.5** Verify core infrastructure tests pass and server starts
-- Run all project setup and initialization tests
-- Confirm server can be started and responds to basic MCP commands
-- Validate TypeScript compilation produces working JavaScript
-- Test clean shutdown behavior
+**1.5** ✅ **COMPLETED** Verify core infrastructure tests pass and server starts
+- ✅ Run all project setup and initialization tests (8/8 passing)
+- ✅ Confirm server can be started and responds to basic MCP commands
+- ✅ Validate TypeScript compilation produces working JavaScript
+- ✅ Test clean shutdown behavior
 
 ### 2. PTY Backend & Session Management
 
