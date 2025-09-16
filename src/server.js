@@ -1,5 +1,7 @@
 import express from 'express';
 import Joi from 'joi';
+import { PtyBackend } from './pty-backend.js';
+import { SessionManager } from './session-manager.js';
 
 // JSON-RPC request validation schema
 const jsonRpcRequestSchema = Joi.object({
@@ -22,10 +24,19 @@ const JsonRpcErrors = {
 export async function createServer(config = {}) {
   const {
     port = process.env.PORT || 3000,
-    apiKeys = process.env.API_KEYS ? process.env.API_KEYS.split(',') : ['default-api-key']
+    apiKeys = process.env.API_KEYS ? process.env.API_KEYS.split(',') : ['default-api-key'],
+    maxSessions = config.maxSessions || 10,
+    sessionTimeout = config.sessionTimeout || 30 * 60 * 1000
   } = config;
 
   const app = express();
+
+  // Initialize PTY backend and session manager
+  const ptyBackend = new PtyBackend();
+  const sessionManager = new SessionManager(ptyBackend, {
+    maxSessions,
+    sessionTimeout
+  });
 
   // Middleware
   app.use(express.json({ limit: '1mb' }));
@@ -95,24 +106,22 @@ export async function createServer(config = {}) {
   async function handleMcpMethod(method, params) {
     switch (method) {
       case 'tui.start':
-        // Placeholder implementation - will be implemented in later tasks
-        return { session_id: 'temp-session-id', seq: 0 };
+        return await handleTuiStart(params);
 
       case 'tui.read_frame':
-        // Placeholder implementation
-        return { seq: 0, rows: 24, cols: 80, cursor: { row: 0, col: 0 }, text: '' };
+        return await handleTuiReadFrame(params);
 
       case 'tui.send_keys':
-        // Placeholder implementation
-        return { ok: true };
+        return await handleTuiSendKeys(params);
 
       case 'tui.expect':
-        // Placeholder implementation
-        return { matched: false, snapshot_seq: 0 };
+        return await handleTuiExpect(params);
+
+      case 'tui.resize':
+        return await handleTuiResize(params);
 
       case 'tui.close':
-        // Placeholder implementation
-        return { ok: true, exit_code: 0 };
+        return await handleTuiClose(params);
 
       default:
         const error = new Error(JsonRpcErrors.METHOD_NOT_FOUND.message);
@@ -121,12 +130,201 @@ export async function createServer(config = {}) {
     }
   }
 
+  // MCP tool implementations
+  async function handleTuiStart(params) {
+    const schema = Joi.object({
+      command: Joi.string().required(),
+      args: Joi.array().items(Joi.string()).default([]),
+      cwd: Joi.string(),
+      env: Joi.object().pattern(Joi.string(), Joi.string()).default({}),
+      rows: Joi.number().integer().min(1).max(1000).default(24),
+      cols: Joi.number().integer().min(1).max(1000).default(80)
+    });
+
+    const { error, value } = schema.validate(params);
+    if (error) {
+      const validationError = new Error(`Invalid parameters: ${error.message}`);
+      validationError.code = JsonRpcErrors.INVALID_PARAMS.code;
+      throw validationError;
+    }
+
+    try {
+      const session = await sessionManager.createSession(value);
+      return {
+        session_id: session.id,
+        seq: session.lastSequence
+      };
+    } catch (err) {
+      const error = new Error(`Failed to start TUI session: ${err.message}`);
+      error.code = JsonRpcErrors.INTERNAL_ERROR.code;
+      throw error;
+    }
+  }
+
+  async function handleTuiReadFrame(params) {
+    const schema = Joi.object({
+      session_id: Joi.string().required(),
+      since_seq: Joi.number().integer().min(0).default(0)
+    });
+
+    const { error, value } = schema.validate(params);
+    if (error) {
+      const validationError = new Error(`Invalid parameters: ${error.message}`);
+      validationError.code = JsonRpcErrors.INVALID_PARAMS.code;
+      throw validationError;
+    }
+
+    try {
+      const frame = sessionManager.getSessionFrame(value.session_id, value.since_seq);
+      return {
+        seq: frame.sequence,
+        rows: frame.rows,
+        cols: frame.cols,
+        cursor: frame.cursor,
+        text: frame.text
+      };
+    } catch (err) {
+      const error = new Error(`Failed to read frame: ${err.message}`);
+      error.code = JsonRpcErrors.INTERNAL_ERROR.code;
+      throw error;
+    }
+  }
+
+  async function handleTuiSendKeys(params) {
+    const schema = Joi.object({
+      session_id: Joi.string().required(),
+      keys: Joi.array().items(Joi.string()).required(),
+      throttle_ms: Joi.number().integer().min(0).max(1000).default(10)
+    });
+
+    const { error, value } = schema.validate(params);
+    if (error) {
+      const validationError = new Error(`Invalid parameters: ${error.message}`);
+      validationError.code = JsonRpcErrors.INVALID_PARAMS.code;
+      throw validationError;
+    }
+
+    try {
+      await sessionManager.sendKeys(value.session_id, value.keys, value.throttle_ms);
+      return { ok: true };
+    } catch (err) {
+      const error = new Error(`Failed to send keys: ${err.message}`);
+      error.code = JsonRpcErrors.INTERNAL_ERROR.code;
+      throw error;
+    }
+  }
+
+  async function handleTuiExpect(params) {
+    const schema = Joi.object({
+      session_id: Joi.string().required(),
+      pattern: Joi.string().required(),
+      timeout_ms: Joi.number().integer().min(100).max(30000).default(5000),
+      negate: Joi.boolean().default(false)
+    });
+
+    const { error, value } = schema.validate(params);
+    if (error) {
+      const validationError = new Error(`Invalid parameters: ${error.message}`);
+      validationError.code = JsonRpcErrors.INVALID_PARAMS.code;
+      throw validationError;
+    }
+
+    // Placeholder implementation - will be enhanced with pattern matching
+    try {
+      const frame = sessionManager.getSessionFrame(value.session_id);
+      const regex = new RegExp(value.pattern);
+      const matched = regex.test(frame.text) !== value.negate;
+
+      return {
+        matched,
+        snapshot_seq: frame.sequence
+      };
+    } catch (err) {
+      const error = new Error(`Failed to expect pattern: ${err.message}`);
+      error.code = JsonRpcErrors.INTERNAL_ERROR.code;
+      throw error;
+    }
+  }
+
+  async function handleTuiResize(params) {
+    const schema = Joi.object({
+      session_id: Joi.string().required(),
+      rows: Joi.number().integer().min(1).max(1000).required(),
+      cols: Joi.number().integer().min(1).max(1000).required()
+    });
+
+    const { error, value } = schema.validate(params);
+    if (error) {
+      const validationError = new Error(`Invalid parameters: ${error.message}`);
+      validationError.code = JsonRpcErrors.INVALID_PARAMS.code;
+      throw validationError;
+    }
+
+    try {
+      await sessionManager.resizeSession(value.session_id, value.rows, value.cols);
+      return { ok: true };
+    } catch (err) {
+      const error = new Error(`Failed to resize session: ${err.message}`);
+      error.code = JsonRpcErrors.INTERNAL_ERROR.code;
+      throw error;
+    }
+  }
+
+  async function handleTuiClose(params) {
+    const schema = Joi.object({
+      session_id: Joi.string().required(),
+      signal: Joi.string().valid('SIGTERM', 'SIGKILL', 'SIGINT').default('SIGTERM')
+    });
+
+    const { error, value } = schema.validate(params);
+    if (error) {
+      const validationError = new Error(`Invalid parameters: ${error.message}`);
+      validationError.code = JsonRpcErrors.INVALID_PARAMS.code;
+      throw validationError;
+    }
+
+    try {
+      const session = sessionManager.getSession(value.session_id);
+      await sessionManager.closeSession(value.session_id, value.signal);
+
+      return {
+        ok: true,
+        exit_code: session.exitCode
+      };
+    } catch (err) {
+      const error = new Error(`Failed to close session: ${err.message}`);
+      error.code = JsonRpcErrors.INTERNAL_ERROR.code;
+      throw error;
+    }
+  }
+
+  // Set up graceful shutdown
+  const shutdown = async () => {
+    console.log('Shutting down MCP TUI Runner...');
+
+    try {
+      await sessionManager.cleanup();
+      server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+      });
+    } catch (error) {
+      console.error('Error during shutdown:', error);
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+
   // Start the server
   const server = app.listen(port, () => {
     console.log(`MCP TUI Runner server listening on port ${port}`);
+    console.log(`Maximum sessions: ${maxSessions}`);
+    console.log(`Session timeout: ${sessionTimeout / 1000}s`);
   });
 
-  return { app, server };
+  return { app, server, sessionManager };
 }
 
 // Start server if this file is run directly

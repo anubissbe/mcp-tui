@@ -70,6 +70,11 @@ describe('MCP Server HTTP Tests', () => {
     // Should return valid JSON-RPC response structure
     assert.strictEqual(response.body.jsonrpc, '2.0');
     assert.strictEqual(response.body.id, 1);
+    // Should now return actual session data
+    if (response.body.result) {
+      assert.ok(response.body.result.session_id);
+      assert.ok(typeof response.body.result.seq === 'number');
+    }
   });
 
   test('should validate JSON-RPC request format', async () => {
